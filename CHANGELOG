@@ -6,6 +6,8 @@ Unreleased
         * Set the keyboard tonic with the new Project Key setting
         * Map all keyboard buttons to consecutive notes in the selected scale
         * Add an adjustable fade-out for live keyboard sample previews
+        * Allow musical keys to be played while the song is running
+        * Add an L2+L1 scale-aware chord selector using saved ARPG commands
     Add RELS command to fade and stop samples over a chosen number of ticks
 
 1.6.0-bacon20

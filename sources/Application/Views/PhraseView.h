@@ -53,6 +53,9 @@ class PhraseView : public View {
     void stopLiveKey();
     int getLiveKeyIndex(unsigned short keyMask) const;
     int getLiveNote(int keyIndex, int octave) const;
+    unsigned short getLiveChordArpeggio(int rootNote) const;
+    void writeLiveChordCommand(unsigned short arpeggio);
+    void showLiveChordSelector();
 
     void setTextProps(GUITextProperties &props, int row, int col, bool restore);
 
@@ -91,6 +94,9 @@ class PhraseView : public View {
     bool liveKeyMode_;
     bool liveL2Used_;
     bool liveNotePlaying_;
+    bool liveChordSelector_;
+    int liveChordType_;
+    int pendingLiveChordType_;
     int liveOctave_;
     unsigned short previousButtonMask_;
     unsigned short activeLiveKeyMask_;

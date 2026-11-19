@@ -14,8 +14,9 @@ PlayerMixer::PlayerMixer() {
 
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         lastInstrument_[i] = 0;
-		channel_[i] = new PlayerChannel(i);
-		isChannelPlaying_[i] = false;
+        channel_[i] = new PlayerChannel(i);
+        isChannelPlaying_[i] = false;
+        instrumentGeneration_[i] = 0;
     }
 }
 
@@ -116,16 +117,18 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
   clipped_=ms->Clipped();
 } ;
 
-
-void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument)  {
+void PlayerMixer::StartInstrument(int channel, I_Instrument *instrument,
+                                  unsigned char note, bool newInstrument) {
     channel_[channel]->StartInstrument(instrument, note, newInstrument);
     lastInstrument_[channel] = instrument;
     notes_[channel] = note;
+    instrumentGeneration_[channel]++;
 };
 
 void PlayerMixer::StopInstrument(int channel) {
     channel_[channel]->StopInstrument();
     notes_[channel] = 0xFF;
+    instrumentGeneration_[channel]++;
 }
 
 void PlayerMixer::ReleaseInstrument(int channel, int milliseconds) {
@@ -175,8 +178,10 @@ void PlayerMixer::OnPlayerStop() {
 
 static char noteBuffer[5] ;
 
-int PlayerMixer::GetChannelNote(int channel) {
-	return notes_[channel] ;
+int PlayerMixer::GetChannelNote(int channel) { return notes_[channel]; }
+
+unsigned int PlayerMixer::GetInstrumentGeneration(int channel) {
+    return instrumentGeneration_[channel];
 }
 
 char *PlayerMixer::GetPlayedNote(int channel) {
@@ -186,7 +191,7 @@ char *PlayerMixer::GetPlayedNote(int channel) {
 		return noteBuffer ;
     }
     return "  " ;
-} ;
+};
 
 char *PlayerMixer::GetPlayedOctive(int channel) {
     if (notes_[channel]!=0xFF) {

@@ -17,6 +17,18 @@ static const unsigned short LIVE_KEY_MASK =
     EPBM_LEFT | EPBM_DOWN | EPBM_RIGHT | EPBM_UP | EPBM_A | EPBM_B | EPBM_X |
     EPBM_Y | EPBM_R | EPBM_R2 | EPBM_SELECT | EPBM_START;
 
+enum LiveChordType {
+    LCT_NOTE,
+    LCT_FIFTH,
+    LCT_TRIAD,
+    LCT_SEVENTH,
+    LCT_NINTH,
+    LCT_COUNT
+};
+
+static const char *LIVE_CHORD_NAMES[LCT_COUNT] = {"NOTE", "5TH", "TRIAD", "7TH",
+                                                  "9TH"};
+
 static void CommandSelectorCallback(View &v, ModalView &d) {
     ((PhraseView &)v).onCommandSelectorResult(d);
 }
@@ -43,6 +55,9 @@ PhraseView::PhraseView(GUIWindow &w, ViewData *viewData)
     liveKeyMode_ = false;
     liveL2Used_ = false;
     liveNotePlaying_ = false;
+    liveChordSelector_ = false;
+    liveChordType_ = LCT_NOTE;
+    pendingLiveChordType_ = LCT_TRIAD;
     liveOctave_ = 3;
     previousButtonMask_ = 0;
     activeLiveKeyMask_ = 0;
@@ -828,6 +843,9 @@ void PhraseView::OnFocus() {
     viewMode_ = VM_NORMAL;
     liveKeyMode_ = false;
     liveL2Used_ = false;
+    liveChordSelector_ = false;
+    liveChordType_ = LCT_NOTE;
+    pendingLiveChordType_ = LCT_TRIAD;
     liveOctave_ = lastNote_ / 12 - 2;
     previousButtonMask_ = 0;
     activeLiveKeyMask_ = 0;
@@ -982,6 +1000,46 @@ bool PhraseView::processLiveKeyButtonMask(unsigned short mask) {
     unsigned short releasedButtons = previousButtonMask_ & ~mask;
     previousButtonMask_ = mask;
 
+    if (!liveChordSelector_ && (mask & EPBM_L2) && (mask & EPBM_L) &&
+        (pressedButtons & (EPBM_L2 | EPBM_L))) {
+        stopLiveKey();
+        liveChordSelector_ = true;
+        pendingLiveChordType_ =
+            liveChordType_ == LCT_NOTE ? LCT_TRIAD : liveChordType_;
+        liveL2Used_ = true;
+        showLiveChordSelector();
+        isDirty_ = true;
+        return true;
+    }
+
+    if (liveChordSelector_) {
+        if (releasedButtons & EPBM_L2) {
+            liveChordSelector_ = false;
+            View::SetNotification("Chord selection cancelled");
+        } else if (pressedButtons & (EPBM_LEFT | EPBM_DOWN)) {
+            pendingLiveChordType_ =
+                (pendingLiveChordType_ + LCT_COUNT - 1) % LCT_COUNT;
+            showLiveChordSelector();
+        } else if (pressedButtons & (EPBM_RIGHT | EPBM_UP)) {
+            pendingLiveChordType_ = (pendingLiveChordType_ + 1) % LCT_COUNT;
+            showLiveChordSelector();
+        } else if (pressedButtons & EPBM_A) {
+            liveChordType_ = pendingLiveChordType_;
+            liveChordSelector_ = false;
+            liveKeyMode_ = true;
+            char notification[24];
+            sprintf(notification, "Musical keys: %s",
+                    LIVE_CHORD_NAMES[liveChordType_]);
+            View::SetNotification(notification);
+        } else if (pressedButtons & EPBM_B) {
+            liveChordSelector_ = false;
+            View::SetNotification("Chord selection cancelled");
+        }
+        liveL2Used_ = true;
+        isDirty_ = true;
+        return true;
+    }
+
     if (pressedButtons & EPBM_L2) {
         liveL2Used_ = false;
         isDirty_ = true;
@@ -1069,17 +1127,19 @@ void PhraseView::playLiveKey(unsigned short keyMask) {
     if (instrument < 0 || instrument >= MAX_INSTRUMENT_COUNT)
         instrument = 0;
 
+    unsigned short arpeggio = getLiveChordArpeggio(note);
+    if (arpeggio)
+        writeLiveChordCommand(arpeggio);
+
     stopAudition();
     Player *player = Player::GetInstance();
-    if (player->PlayLiveNote(viewData_->songX_, instrument, note)) {
+    if (player->PlayLiveNote(viewData_->songX_, instrument, note, arpeggio)) {
         liveNotePlaying_ = true;
         activeLiveKeyMask_ = keyMask;
     } else {
         liveNotePlaying_ = false;
         activeLiveKeyMask_ = 0;
-        if (player->IsRunning()) {
-            View::SetNotification("Stop playback to audition");
-        }
+        View::SetNotification("Unable to play note");
     }
 }
 
@@ -1130,6 +1190,78 @@ int PhraseView::getLiveNote(int keyIndex, int octave) const {
     }
 
     return note;
+}
+
+unsigned short PhraseView::getLiveChordArpeggio(int rootNote) const {
+    if (liveChordType_ == LCT_NOTE)
+        return 0;
+
+    static const int degreeOffsets[LCT_COUNT][4] = {
+        {0, 0, 0, 0}, {4, 0, 0, 0}, {2, 4, 0, 0}, {2, 4, 6, 0}, {2, 4, 6, 8}};
+    static const int toneCounts[LCT_COUNT] = {0, 1, 2, 3, 4};
+
+    int scale = viewData_->project_->GetScale();
+    int scaleKey = viewData_->project_->GetScaleKey();
+    unsigned short arpeggio = 0;
+
+    for (int tone = 0; tone < toneCounts[liveChordType_]; tone++) {
+        int targetNote = rootNote;
+        int degrees = degreeOffsets[liveChordType_][tone];
+        while (degrees > 0) {
+            targetNote++;
+            int scaleStep = (targetNote - scaleKey) % 12;
+            if (scaleStep < 0)
+                scaleStep += 12;
+            if (scaleSteps[scale][scaleStep])
+                degrees--;
+        }
+
+        int interval = targetNote - rootNote;
+        if (interval > 15)
+            interval = 15;
+        arpeggio |= (interval & 0xF) << (12 - tone * 4);
+    }
+
+    return arpeggio;
+}
+
+void PhraseView::writeLiveChordCommand(unsigned short arpeggio) {
+    int position = 16 * viewData_->currentPhrase_ + row_;
+    FourCC *commands[] = {phrase_->cmd1_ + position, phrase_->cmd2_ + position};
+    ushort *parameters[] = {phrase_->param1_ + position,
+                            phrase_->param2_ + position};
+    int target = -1;
+
+    for (int i = 0; i < 2; i++) {
+        if (*commands[i] == I_CMD_ARPG) {
+            target = i;
+            break;
+        }
+    }
+    if (target < 0) {
+        for (int i = 0; i < 2; i++) {
+            if (*commands[i] == I_CMD_NONE) {
+                target = i;
+                break;
+            }
+        }
+    }
+
+    if (target >= 0) {
+        *commands[target] = I_CMD_ARPG;
+        *parameters[target] = arpeggio;
+        lastCmd_ = I_CMD_ARPG;
+        lastParam_ = arpeggio;
+    } else {
+        View::SetNotification("No empty command for chord");
+    }
+}
+
+void PhraseView::showLiveChordSelector() {
+    char notification[24];
+    sprintf(notification, "Chord: %s  A=OK",
+            LIVE_CHORD_NAMES[pendingLiveChordType_]);
+    View::SetNotification(notification);
 }
 
 void PhraseView::stopLiveKey() {
@@ -1450,7 +1582,13 @@ void PhraseView::DrawView() {
     char title[24];
 
     SetColor(CD_NORMAL);
-    if (liveKeyMode_) {
+    if (liveChordSelector_) {
+        sprintf(title, "Phrase %2.2x Pick %s", viewData_->currentPhrase_,
+                LIVE_CHORD_NAMES[pendingLiveChordType_]);
+    } else if (liveKeyMode_ && liveChordType_ != LCT_NOTE) {
+        sprintf(title, "Phrase %2.2x Ch %s O%d", viewData_->currentPhrase_,
+                LIVE_CHORD_NAMES[liveChordType_], liveOctave_);
+    } else if (liveKeyMode_) {
         sprintf(title, "Phrase %2.2x Keys %s O%d", viewData_->currentPhrase_,
                 scaleNotes[viewData_->project_->GetScaleKey()], liveOctave_);
     } else {

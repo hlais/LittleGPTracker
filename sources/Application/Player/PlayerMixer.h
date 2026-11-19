@@ -33,6 +33,7 @@ public:
     void ReleaseInstrumentSamples(int channel, int sampleCount);
 
     int GetChannelNote(int Channel);
+    unsigned int GetInstrumentGeneration(int channel);
 
     I_Instrument *GetInstrument(int channel);
 
@@ -71,11 +72,12 @@ private:
 	bool isChannelPlaying_[SONG_CHANNEL_COUNT] ;
 
 	AudioFileStreamer fileStreamer_ ;
-	PlayerChannel *channel_[SONG_CHANNEL_COUNT] ;
+    PlayerChannel *channel_[SONG_CHANNEL_COUNT];
 
-	// store trigger notes, 0xFF = none
-	
-    unsigned char notes_[SONG_CHANNEL_COUNT] ;
-} ;
+    // store trigger notes, 0xFF = none
+
+    unsigned char notes_[SONG_CHANNEL_COUNT];
+    unsigned int instrumentGeneration_[SONG_CHANNEL_COUNT];
+};
 
 #endif

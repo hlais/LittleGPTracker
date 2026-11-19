@@ -348,6 +348,8 @@ To move from one screen to the other, press the RTrigger combined with the direc
 - If no instrument is set when triggering a new note, tables are not stopped, running commands are not stopped and phase of oscillator instrument is not reset (allowing for clickless transition)
 - On Miyoo Mini Plus, tap L2 to toggle musical-keys mode. Each key auditions its note and writes it to the current Phrase row without moving the cursor.
 - Musical-key order is LEFT, DOWN, RIGHT, UP, A, B, X, Y, R1, R2, SELECT, START. The buttons play consecutive notes from the Project Key and Scale settings; hold L2 and press UP/DOWN to change octave.
+- Musical keys remain available while the song is playing. Preview uses a silent channel when one is available; if all eight channels are sounding, it temporarily uses the selected Phrase channel.
+- Hold L2+L1 to select NOTE, 5TH, TRIAD, 7TH, or 9TH mode. Chords follow the Project Key and Scale, preview through the sample arpeggiator, and save an ARPG command into the first available command column on the current row.
 
 ## Instrument Screen
 

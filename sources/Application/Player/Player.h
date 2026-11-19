@@ -71,7 +71,8 @@ public:
     bool IsRunning();
     bool Clipped();
 
-    bool PlayLiveNote(int channel, int instrument, unsigned char note);
+    bool PlayLiveNote(int channel, int instrument, unsigned char note,
+                      unsigned short arpeggio = 0);
     void StopLiveNote(int channel);
     void ReleaseLiveNote(int channel, int milliseconds);
 
@@ -142,12 +143,14 @@ protected:
 	int lastBeatCount_ ;
 	unsigned char lastSongPos_ ;
 	bool firstPlayCycle_ ;
-	bool triggerLiveChains_ ;
+    bool triggerLiveChains_;
 
-	double startTime_ ;
+    double startTime_;
     double currentTime_;
 
     char instrumentOnChannel_[SONG_CHANNEL_COUNT][3];
+    int liveNoteChannel_;
+    unsigned int liveNoteGeneration_;
 
     // Live queuing system
 

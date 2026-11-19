@@ -21,16 +21,18 @@ Player::Player() {
 	mixer_=new PlayerMixer();
 
     lastSongPos_ = 0;
-    mode_=PM_SONG;
-	sequencerMode_=SM_SONG;
-	lastPercentage_=0;
-	retrigAllImmediate_=false;
-	startTime_=0;
-	currentTime_=0;
+    mode_ = PM_SONG;
+    sequencerMode_ = SM_SONG;
+    lastPercentage_ = 0;
+    retrigAllImmediate_ = false;
+    startTime_ = 0;
+    currentTime_ = 0;
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
 
-	for (int i=0;i<SONG_CHANNEL_COUNT;i++) {
-		instrumentOnChannel_[i][0] = ' ';
-		instrumentOnChannel_[i][1] = ' ';
+    for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+        instrumentOnChannel_[i][0] = ' ';
+        instrumentOnChannel_[i][1] = ' ';
 		instrumentOnChannel_[i][2] = '\0';
     }
 }
@@ -42,10 +44,12 @@ Player *Player::GetInstance() {
     return instance_;
 }
 
-bool Player::Init(Project *project,ViewData *viewData) {
+bool Player::Init(Project *project, ViewData *viewData) {
 
     viewData_ = viewData;
     project_ = project;
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
 
     if (!mixer_->Init(project)) {
         return false;
@@ -103,10 +107,12 @@ void Player::Start(PlayMode mode, bool forceSongMode) {
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         mixer_->StopChannel(i);
         timeToLive_[i] = 0;
-        timeToStart_[i]=0;
-		TablePlayback &tpb=TablePlayback::GetTablePlayback(i);
-		tpb.Stop();
+        timeToStart_[i] = 0;
+        TablePlayback &tpb = TablePlayback::GetTablePlayback(i);
+        tpb.Stop();
     }
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
 
     // Tell the instruments we're starting
 
@@ -187,6 +193,8 @@ void Player::Stop() {
     for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
         mixer_->StopChannel(i);
     }
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
     MidiService::GetInstance()->OnPlayerStop();
     mixer_->OnPlayerStop();
 
@@ -392,10 +400,10 @@ void Player::OnSongStartButton(unsigned int from,unsigned int to,bool requestSto
 
 bool Player::IsRunning() { return isRunning_; }
 
-bool Player::PlayLiveNote(int channel, int instrument, unsigned char note) {
-    if (isRunning_ || !project_ || channel < 0 ||
-        channel >= SONG_CHANNEL_COUNT || instrument < 0 ||
-        instrument >= MAX_INSTRUMENT_COUNT || note > 119) {
+bool Player::PlayLiveNote(int channel, int instrument, unsigned char note,
+                          unsigned short arpeggio) {
+    if (!project_ || channel < 0 || channel >= SONG_CHANNEL_COUNT ||
+        instrument < 0 || instrument >= MAX_INSTRUMENT_COUNT || note > 119) {
         return false;
     }
 
@@ -404,29 +412,78 @@ bool Player::PlayLiveNote(int channel, int instrument, unsigned char note) {
     if (!liveInstrument)
         return false;
 
-    mixer_->StopInstrument(channel);
-    mixer_->StartInstrument(channel, liveInstrument, note, true);
+    mixer_->Lock();
 
-    instrumentOnChannel_[channel][0] = (instrument / 16) > 9
-                                           ? 'A' - 10 + (instrument / 16)
-                                           : '0' + (instrument / 16);
-    instrumentOnChannel_[channel][1] = (instrument % 16) > 9
-                                           ? 'A' - 10 + (instrument % 16)
-                                           : '0' + (instrument % 16);
-    instrumentOnChannel_[channel][2] = '\0';
-    return true;
+    if (liveNoteChannel_ >= 0 && mixer_->GetInstrument(liveNoteChannel_) &&
+        mixer_->GetInstrumentGeneration(liveNoteChannel_) ==
+            liveNoteGeneration_) {
+        mixer_->StopInstrument(liveNoteChannel_);
+    }
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
+
+    int previewChannel = channel;
+    if (isRunning_ && (mixer_->GetInstrument(previewChannel) ||
+                       mixer_->IsChannelMuted(previewChannel))) {
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+            if (!mixer_->GetInstrument(i) && !mixer_->IsChannelMuted(i)) {
+                previewChannel = i;
+                break;
+            }
+        }
+    }
+
+    mixer_->StopInstrument(previewChannel);
+    mixer_->StartInstrument(previewChannel, liveInstrument, note, true);
+
+    bool started = mixer_->GetInstrument(previewChannel) == liveInstrument;
+    if (started) {
+        if (arpeggio)
+            liveInstrument->ProcessCommand(previewChannel, I_CMD_ARPG,
+                                           arpeggio);
+        liveNoteChannel_ = previewChannel;
+        liveNoteGeneration_ = mixer_->GetInstrumentGeneration(previewChannel);
+        instrumentOnChannel_[previewChannel][0] =
+            (instrument / 16) > 9 ? 'A' - 10 + (instrument / 16)
+                                  : '0' + (instrument / 16);
+        instrumentOnChannel_[previewChannel][1] =
+            (instrument % 16) > 9 ? 'A' - 10 + (instrument % 16)
+                                  : '0' + (instrument % 16);
+        instrumentOnChannel_[previewChannel][2] = '\0';
+    }
+
+    mixer_->Unlock();
+    return started;
 }
 
 void Player::StopLiveNote(int channel) {
-    if (!isRunning_ && channel >= 0 && channel < SONG_CHANNEL_COUNT) {
-        mixer_->StopInstrument(channel);
+    if (channel < 0 || channel >= SONG_CHANNEL_COUNT)
+        return;
+
+    mixer_->Lock();
+    if (liveNoteChannel_ >= 0 && mixer_->GetInstrument(liveNoteChannel_) &&
+        mixer_->GetInstrumentGeneration(liveNoteChannel_) ==
+            liveNoteGeneration_) {
+        mixer_->StopInstrument(liveNoteChannel_);
     }
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
+    mixer_->Unlock();
 }
 
 void Player::ReleaseLiveNote(int channel, int milliseconds) {
-    if (!isRunning_ && channel >= 0 && channel < SONG_CHANNEL_COUNT) {
-        mixer_->ReleaseInstrument(channel, milliseconds);
+    if (channel < 0 || channel >= SONG_CHANNEL_COUNT)
+        return;
+
+    mixer_->Lock();
+    if (liveNoteChannel_ >= 0 && mixer_->GetInstrument(liveNoteChannel_) &&
+        mixer_->GetInstrumentGeneration(liveNoteChannel_) ==
+            liveNoteGeneration_) {
+        mixer_->ReleaseInstrument(liveNoteChannel_, milliseconds);
     }
+    liveNoteChannel_ = -1;
+    liveNoteGeneration_ = 0;
+    mixer_->Unlock();
 }
 
 bool Player::Clipped() { return mixer_->Clipped(); }
