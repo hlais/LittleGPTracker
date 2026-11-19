@@ -23,9 +23,14 @@ miyoo mini button codes:
   <MAP src="key:0:right" dst="/event/right" />
   <MAP src="key:0:space" dst="/event/a" />
   <MAP src="key:0:left ctrl" dst="/event/b" />
+  <MAP src="key:0:left shift" dst="/event/x" />
+  <MAP src="key:0:left alt" dst="/event/y" />
   <MAP src="key:0:return" dst="/event/start" />
+  <MAP src="key:0:right ctrl" dst="/event/select" />
   <MAP src="key:0:e" dst="/event/lshoulder" />
   <MAP src="key:0:t" dst="/event/rshoulder" />
+  <MAP src="key:0:tab" dst="/event/l2" />
+  <MAP src="key:0:backspace" dst="/event/r2" />
 
   <!-- macro binds -->
   <!--

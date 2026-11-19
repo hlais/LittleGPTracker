@@ -20,22 +20,25 @@ public:
 
 	bool Start() ;
 	void Stop() ;
-	bool Init(Project *project) ;
-	void Close() ;
+    bool Init(Project *project);
+    void Close();
 
-	void OnPlayerStart() ;
-	void OnPlayerStop() ;
+    void OnPlayerStart();
+    void OnPlayerStop();
 
-	void StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument) ;
-	void StopInstrument(int channel) ;
+    void StartInstrument(int channel, I_Instrument *instrument,
+                         unsigned char note, bool newInstrument);
+    void StopInstrument(int channel);
+    void ReleaseInstrument(int channel, int milliseconds);
+    void ReleaseInstrumentSamples(int channel, int sampleCount);
 
-	int GetChannelNote(int Channel) ;
+    int GetChannelNote(int Channel);
 
-	I_Instrument *GetInstrument(int channel) ;
+    I_Instrument *GetInstrument(int channel);
 
-	I_Instrument *GetLastInstrument(int channel) ;
-	
-	void StartChannel(int channel) ;
+    I_Instrument *GetLastInstrument(int channel);
+
+    void StartChannel(int channel) ;
 	void StopChannel(int channel) ;
 
 	bool IsChannelPlaying(int channel) ;

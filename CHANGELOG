@@ -1,3 +1,13 @@
+Unreleased
+    Add a Miyoo Mini Plus musical keyboard mode to the Phrase screen
+        * Tap L2 to toggle the keyboard on or off
+        * Play and enter notes on the current row without moving the cursor
+        * Hold L2 and press UP/DOWN to change octave
+        * Set the keyboard tonic with the new Project Key setting
+        * Map all keyboard buttons to consecutive notes in the selected scale
+        * Add an adjustable fade-out for live keyboard sample previews
+    Add RELS command to fade and stop samples over a chosen number of ticks
+
 1.6.0-bacon20
     Fixed MIDI muting
     Added MIDI chord command (MCHD)

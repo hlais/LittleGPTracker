@@ -293,6 +293,9 @@ To move from one screen to the other, press the RTrigger combined with the direc
 - **Tempo:**: Can be set between 60bpm [0x3c] and 400bpm [0x190]. Resolution aligned to LSDJ. (nudge with b + left / right)
 - **Master:** Main volume goes from 10% to 200%. Piggy is loud now!
 - **Transpose:** Live transposition of every triggered instruments.
+- **Scale:** Selects the note scale used by Phrase note editing and musical-keys mode.
+- **Key:** Sets the tonic for the selected scale. For example, Key D with Ionian mode selects D major.
+- **Key release:** Sets the sample-preview fade-out for musical-keys mode, from an immediate stop at 0 ms up to 1000 ms.
 - **Soft clip:** Master channel with 5 preset levels of saturation. Change Unity to Boost for extreme loudness!
 - **Compact Sequencer:** Free all unused chain/phrases.
 - **Compact Instruments:** All unused instruments get their sample set to (null), old parameter settings stick. A dialog offers to remove unused samples.
@@ -343,6 +346,8 @@ To move from one screen to the other, press the RTrigger combined with the direc
 - If you copy/cut anything in the phrase screen, pasting will put the data in the column where you are currently located. Pasting incompatible data like a note into the effect column etc does nothing.
 - you can clone a MIDI instrument in the phrase screen by pressing L_TRIGGER+(B,A) on instrument number in phrase screen. Properly saved & restored. You can't delete them once cloned (can't revert them to sample type).
 - If no instrument is set when triggering a new note, tables are not stopped, running commands are not stopped and phase of oscillator instrument is not reset (allowing for clickless transition)
+- On Miyoo Mini Plus, tap L2 to toggle musical-keys mode. Each key auditions its note and writes it to the current Phrase row without moving the cursor.
+- Musical-key order is LEFT, DOWN, RIGHT, UP, A, B, X, Y, R1, R2, SELECT, START. The buttons play consecutive notes from the Project Key and Scale settings; hold L2 and press UP/DOWN to change octave.
 
 ## Instrument Screen
 
@@ -594,6 +599,14 @@ Sets MIDI note velocity
 RTRG 0001: loop one tick from current play position
 RTRG 0102: loop of two ticks but move the loop one tick every loop
 RTRG 0101: does not do anything because after looping one tick, you move forward one tick and therefore go back to the current position :)
+
+## RELS --bb
+
+**Fades the current sample to silence over bb tracker ticks, then stops the sample.**
+
+- `RELS 0000` stops the sample immediately.
+- `RELS 0004` fades and stops the sample over four ticks.
+- RELS works with sample instruments. Use VOLM when you want to change volume without stopping the sample.
 
 ## TABL --bb
 

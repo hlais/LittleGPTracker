@@ -11,6 +11,7 @@ class TablePlayerChange{
 public:
 	int timeToLive_ ;
 	int instrRetrigger_ ;
+	int releaseTicks_ ;
 } ;
 
 struct TablePlayback {

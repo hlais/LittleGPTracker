@@ -141,16 +141,28 @@ ProjectView::ProjectView(GUIWindow &w,ViewData *data):FieldView(w,data) {
     v = project_->FindVariable(VAR_TRANSPOSE);
     position._y += 2;
     UIIntVarField *f2=new UIIntVarField(position,*v,"Transpose: %3.2d",-48,48,0x1,0xC) ;
-	T_SimpleList<UIField>::Insert(f2) ;
+    T_SimpleList<UIField>::Insert(f2);
 
     v = project_->FindVariable(VAR_SCALE);
-	// if scale name is not found, set the default chromatic scale
-	if (v->GetInt() < 0) {
-		v->SetInt(0);
+    // if scale name is not found, set the default chromatic scale
+    if (v->GetInt() < 0) {
+        v->SetInt(0);
     }
     position._y += 1;
     field =
         new UIIntVarField(position, *v, "Scale: %s", 0, scaleCount - 1, 1, 10);
+    T_SimpleList<UIField>::Insert(field);
+
+    v = project_->FindVariable(VAR_SCALE_KEY);
+    position._y += 1;
+    field =
+        new UIIntVarField(position, *v, "Key: %s", 0, scaleNoteCount - 1, 1, 1);
+    T_SimpleList<UIField>::Insert(field);
+
+    v = project_->FindVariable(VAR_KEY_RELEASE);
+    position._y += 1;
+    field =
+        new UIIntVarField(position, *v, "Key release: %d ms", 0, 1000, 25, 100);
     T_SimpleList<UIField>::Insert(field);
 
     position._y += 2;

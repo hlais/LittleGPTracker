@@ -35,12 +35,18 @@ tempoNudge_(0)
     this->Insert(softclipGain);
 	Variable *wrap=new Variable("wrap", VAR_WRAP, false);
 	this->Insert(wrap);
-	Variable *transpose=new Variable("transpose", VAR_TRANSPOSE, 0);
-	this->Insert(transpose);
+    Variable *transpose = new Variable("transpose", VAR_TRANSPOSE, 0);
+    this->Insert(transpose);
     Variable *scale =
         new Variable("scale", VAR_SCALE, scaleNames, scaleCount, 0);
     this->Insert(scale);
     scale->SetInt(0);
+    Variable *scaleKey =
+        new Variable("scaleKey", VAR_SCALE_KEY, scaleNotes, scaleNoteCount, 0);
+    this->Insert(scaleKey);
+    Variable *keyRelease =
+        new Variable("keyRelease", VAR_KEY_RELEASE, 150, 1000);
+    this->Insert(keyRelease);
     Variable *renderMode =
         new Variable("renderMode", VAR_RENDER, renderModes, MAX_RENDER_MODE, 0);
     this->Insert(renderMode);
@@ -72,9 +78,9 @@ tempoNudge_(0)
 } ;
 
 Project::~Project() {
-	delete song_ ;
-	delete instrumentBank_ ;
-} ;
+    delete song_;
+    delete instrumentBank_;
+};
 
 int Project::GetScale() {
     Variable *v = FindVariable(VAR_SCALE);
@@ -82,12 +88,24 @@ int Project::GetScale() {
     return v->GetInt();
 }
 
+int Project::GetScaleKey() {
+    Variable *v = FindVariable(VAR_SCALE_KEY);
+    NAssert(v);
+    return v->GetInt();
+}
+
+int Project::GetKeyRelease() {
+    Variable *v = FindVariable(VAR_KEY_RELEASE);
+    NAssert(v);
+    return v->GetInt();
+}
+
 int Project::GetTempo() {
-	Variable *v=FindVariable(VAR_TEMPO) ;
-	NAssert(v) ;
-	int tempo = v->GetInt()+tempoNudge_ ;
-	return tempo ;
-} ;
+    Variable *v = FindVariable(VAR_TEMPO);
+    NAssert(v);
+    int tempo = v->GetInt() + tempoNudge_;
+    return tempo ;
+};
 
 int Project::GetMasterVolume() {
     Variable *v = FindVariable(VAR_MASTERVOL);

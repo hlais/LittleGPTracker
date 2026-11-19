@@ -30,6 +30,7 @@
 #define I_CMD_FBAM MAKE_FOURCC('F','B','A','M')
 #define I_CMD_IRTG MAKE_FOURCC('I','R','T','G')
 #define I_CMD_PFIN MAKE_FOURCC('P','F','I','N')
+#define I_CMD_RELS MAKE_FOURCC('R','E','L','S')
 #define I_CMD_DLAY MAKE_FOURCC('D','L','A','Y')
 #define I_CMD_FBMX MAKE_FOURCC('F','B','M','X')
 #define I_CMD_FBTN MAKE_FOURCC('F','B','T','N')

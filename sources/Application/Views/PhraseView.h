@@ -48,6 +48,11 @@ class PhraseView : public View {
 
     void processNormalButtonMask(unsigned short mask);
     void processSelectionButtonMask(unsigned short mask);
+    bool processLiveKeyButtonMask(unsigned short mask);
+    void playLiveKey(unsigned short keyMask);
+    void stopLiveKey();
+    int getLiveKeyIndex(unsigned short keyMask) const;
+    int getLiveNote(int keyIndex, int octave) const;
 
     void setTextProps(GUITextProperties &props, int row, int col, bool restore);
 
@@ -82,6 +87,13 @@ class PhraseView : public View {
 
     int saveCol_;
     int saveRow_;
+
+    bool liveKeyMode_;
+    bool liveL2Used_;
+    bool liveNotePlaying_;
+    int liveOctave_;
+    unsigned short previousButtonMask_;
+    unsigned short activeLiveKeyMask_;
 
     static short offsets_[2][4];
 };

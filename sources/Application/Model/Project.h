@@ -15,8 +15,10 @@
 #define VAR_TRANSPOSE   	MAKE_FOURCC('T', 'R', 'S', 'P')
 #define VAR_SOFTCLIP 		MAKE_FOURCC('S', 'F', 'T', 'C')
 #define VAR_SOFTCLIP_GAIN 	MAKE_FOURCC('S', 'F', 'G', 'N')
-#define VAR_PREGAIN   		MAKE_FOURCC('P', 'R', 'G', 'N')
-#define VAR_SCALE 			MAKE_FOURCC('S', 'C', 'A', 'L')
+#define VAR_PREGAIN MAKE_FOURCC('P', 'R', 'G', 'N')
+#define VAR_SCALE MAKE_FOURCC('S', 'C', 'A', 'L')
+#define VAR_SCALE_KEY MAKE_FOURCC('S', 'K', 'E', 'Y')
+#define VAR_KEY_RELEASE MAKE_FOURCC('K', 'R', 'E', 'L')
 #define VAR_RENDER MAKE_FOURCC('R', 'N', 'D', 'R')
 
 #define PROJECT_NUMBER "1"
@@ -39,6 +41,8 @@ public:
   void OnTempoTap();
   void NudgeTempo(int value);
   int GetScale();
+  int GetScaleKey();
+  int GetKeyRelease();
   int GetTempo(); // Takes nudging into account
   int GetTranspose();
   int GetSoftclip();

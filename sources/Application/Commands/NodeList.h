@@ -12,6 +12,11 @@
 #define URL_EVENT_LSHOULDER "/event/lshoulder"
 #define URL_EVENT_RSHOULDER "/event/rshoulder"
 #define URL_EVENT_START "/event/start"
+#define URL_EVENT_SELECT "/event/select"
+#define URL_EVENT_X "/event/x"
+#define URL_EVENT_Y "/event/y"
+#define URL_EVENT_L2 "/event/l2"
+#define URL_EVENT_R2 "/event/r2"
 
 #define URL_TEMPO_TAP "/tempo/tap"
 #define URL_QUEUE_ROW "/sequencer/current/all/queue"
@@ -27,6 +32,11 @@
 #define TRIG_EVENT_LSHOULDER MAKE_FOURCC('E','V','L','S')
 #define TRIG_EVENT_RSHOULDER MAKE_FOURCC('E','V','R','S')
 #define TRIG_EVENT_START MAKE_FOURCC('E','V','S','T')
+#define TRIG_EVENT_SELECT MAKE_FOURCC('E', 'V', 'S', 'L')
+#define TRIG_EVENT_X MAKE_FOURCC('E', 'V', 'X', '_')
+#define TRIG_EVENT_Y MAKE_FOURCC('E', 'V', 'Y', '_')
+#define TRIG_EVENT_L2 MAKE_FOURCC('E', 'V', 'L', '2')
+#define TRIG_EVENT_R2 MAKE_FOURCC('E', 'V', 'R', '2')
 
 #define TRIG_TEMPO_TAP MAKE_FOURCC('T','T','A','P')
 #define TRIG_SEQ_QUEUE_ROW MAKE_FOURCC('T','S','Q','R')

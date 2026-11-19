@@ -65,16 +65,21 @@ public:
 
     void OnStartButton(PlayMode origin, unsigned int from,
                        bool startFromLastPos, unsigned char chainPos);
-    void OnSongStartButton(unsigned int from,unsigned int to,bool requestStop,bool forceImmediate) ;
+    void OnSongStartButton(unsigned int from, unsigned int to, bool requestStop,
+                           bool forceImmediate);
 
     bool IsRunning();
-    bool Clipped() ;
+    bool Clipped();
+
+    bool PlayLiveNote(int channel, int instrument, unsigned char note);
+    void StopLiveNote(int channel);
+    void ReleaseLiveNote(int channel, int milliseconds);
 
     void ProcessCommands();
-    bool ProcessChannelCommand(int channel,FourCC cmd,ushort param) ;
+    bool ProcessChannelCommand(int channel, FourCC cmd, ushort param);
 
-	void StartStreaming(const Path &path) ;
-	void StopStreaming() ;
+    void StartStreaming(const Path &path);
+    void StopStreaming() ;
 
 	// Channel data
 
@@ -111,11 +116,12 @@ protected:
 	void updatePhrasePos(int pos,int channel) ;
 	void playCursorPosition(int channel) ;
     int  getChannelHop(int channel,int pos) ;
-	void moveToNextStep() ;
-	void moveToNextPhrase(int channel,int hop=-1) ;
-	void moveToNextChain(int channel,int hop) ;
+    void moveToNextStep();
+    void moveToNextPhrase(int channel, int hop = -1);
+    void moveToNextChain(int channel, int hop);
+    void releaseInstrument(int channel, int ticks);
 
-    void triggerLiveChains() ;
+    void triggerLiveChains();
 
     bool isPlayable(int row,int col,int chainPos=0) ;
     bool findPlayable(uchar *row, int col, uchar chainPos = 0);

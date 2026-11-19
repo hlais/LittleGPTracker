@@ -392,6 +392,43 @@ void Player::OnSongStartButton(unsigned int from,unsigned int to,bool requestSto
 
 bool Player::IsRunning() { return isRunning_; }
 
+bool Player::PlayLiveNote(int channel, int instrument, unsigned char note) {
+    if (isRunning_ || !project_ || channel < 0 ||
+        channel >= SONG_CHANNEL_COUNT || instrument < 0 ||
+        instrument >= MAX_INSTRUMENT_COUNT || note > 119) {
+        return false;
+    }
+
+    I_Instrument *liveInstrument =
+        project_->GetInstrumentBank()->GetInstrument(instrument);
+    if (!liveInstrument)
+        return false;
+
+    mixer_->StopInstrument(channel);
+    mixer_->StartInstrument(channel, liveInstrument, note, true);
+
+    instrumentOnChannel_[channel][0] = (instrument / 16) > 9
+                                           ? 'A' - 10 + (instrument / 16)
+                                           : '0' + (instrument / 16);
+    instrumentOnChannel_[channel][1] = (instrument % 16) > 9
+                                           ? 'A' - 10 + (instrument % 16)
+                                           : '0' + (instrument % 16);
+    instrumentOnChannel_[channel][2] = '\0';
+    return true;
+}
+
+void Player::StopLiveNote(int channel) {
+    if (!isRunning_ && channel >= 0 && channel < SONG_CHANNEL_COUNT) {
+        mixer_->StopInstrument(channel);
+    }
+}
+
+void Player::ReleaseLiveNote(int channel, int milliseconds) {
+    if (!isRunning_ && channel >= 0 && channel < SONG_CHANNEL_COUNT) {
+        mixer_->ReleaseInstrument(channel, milliseconds);
+    }
+}
+
 bool Player::Clipped() { return mixer_->Clipped(); }
 
 bool Player::isPlayable(int row, int col, int chainPos) {
@@ -520,11 +557,15 @@ void Player::Update(Observable &o,I_ObservableData *d) {
             TablePlayback &tpb=TablePlayback::GetTablePlayback(channel);
 			if (!tpb.GetAutomation()) {
                 TablePlayerChange tpc;
-                tpc.timeToLive_=timeToLive_[channel];
+                tpc.timeToLive_ = timeToLive_[channel];
                 tpc.instrRetrigger_ = -1;
+                tpc.releaseTicks_ = -1;
                 tpb.ProcessStep(tpc);
-				timeToLive_[channel]=tpc.timeToLive_;
+                timeToLive_[channel] = tpc.timeToLive_;
                 instrRetrigger[channel] = tpc.instrRetrigger_;
+                if (tpc.releaseTicks_ >= 0) {
+                    releaseInstrument(channel, tpc.releaseTicks_);
+                }
             }
         }
 
@@ -640,6 +681,11 @@ bool Player::ProcessChannelCommand(int channel, FourCC cmd, ushort param) {
         if (instr) {
             int timeToLive = (param & 0xFF);
             timeToLive_[channel] = timeToLive + 1;
+        }
+        return true;
+    case I_CMD_RELS:
+        if (instr) {
+            releaseInstrument(channel, param & 0xFF);
         }
         return true;
     case I_CMD_TMPO:
@@ -890,13 +936,27 @@ void Player::playCursorPosition(int channel) {
             if (instrument) {
                 if (instrument->GetTableAutomation()) {
                     TablePlayerChange tpc;
-					tpc.timeToLive_=timeToLive_[channel];
+                    tpc.timeToLive_ = timeToLive_[channel];
+                    tpc.instrRetrigger_ = -1;
+                    tpc.releaseTicks_ = -1;
                     tpb.ProcessStep(tpc);
-                    timeToLive_[channel]=tpc.timeToLive_;
+                    timeToLive_[channel] = tpc.timeToLive_;
+                    if (tpc.releaseTicks_ >= 0) {
+                        releaseInstrument(channel, tpc.releaseTicks_);
+                    }
                 }
             }
         }
     }
+}
+
+void Player::releaseInstrument(int channel, int ticks) {
+    I_Instrument *instrument = mixer_->GetInstrument(channel);
+    if (!instrument || instrument->GetType() != IT_SAMPLE)
+        return;
+    int sampleCount =
+        int(SyncMaster::GetInstance()->GetTickSampleCount() * ticks);
+    mixer_->ReleaseInstrumentSamples(channel, sampleCount);
 }
 
 int Player::getChannelHop(int channel, int pos) {

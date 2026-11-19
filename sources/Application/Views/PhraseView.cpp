@@ -13,6 +13,10 @@
 
 short PhraseView::offsets_[2][4] = {-1, 1, 12, -12, -1, 1, 16, -16};
 
+static const unsigned short LIVE_KEY_MASK =
+    EPBM_LEFT | EPBM_DOWN | EPBM_RIGHT | EPBM_UP | EPBM_A | EPBM_B | EPBM_X |
+    EPBM_Y | EPBM_R | EPBM_R2 | EPBM_SELECT | EPBM_START;
+
 static void CommandSelectorCallback(View &v, ModalView &d) {
     ((PhraseView &)v).onCommandSelectorResult(d);
 }
@@ -36,6 +40,12 @@ PhraseView::PhraseView(GUIWindow &w, ViewData *viewData)
     lastCmd_ = I_CMD_NONE;
     lastParam_ = 0;
     commandSelectorModalActive_ = false;
+    liveKeyMode_ = false;
+    liveL2Used_ = false;
+    liveNotePlaying_ = false;
+    liveOctave_ = 3;
+    previousButtonMask_ = 0;
+    activeLiveKeyMask_ = 0;
 
     clipboard_.active_ = false;
     clipboard_.width_ = 0;
@@ -259,8 +269,15 @@ void PhraseView::updateCursorValue(ViewUpdateDirection direction, int xOffset,
         if (col_ + xOffset == 0) {
             // Add/remove from offset to match selected scale
             int scale = viewData_->project_->GetScale();
-            while (!scaleSteps[scale][(*c + offset) % 12]) {
+            int scaleKey = viewData_->project_->GetScaleKey();
+            int scaleStep = (*c + offset - scaleKey) % 12;
+            if (scaleStep < 0)
+                scaleStep += 12;
+            while (!scaleSteps[scale][scaleStep]) {
                 offset > 0 ? offset++ : offset--;
+                scaleStep = (*c + offset - scaleKey) % 12;
+                if (scaleStep < 0)
+                    scaleStep += 12;
             }
         }
         updateData(c, offset, limit, wrap);
@@ -806,12 +823,21 @@ void PhraseView::switchSoloMode() {
 };
 
 void PhraseView::OnFocus() {
+    stopLiveKey();
     clipboard_.active_ = false;
     viewMode_ = VM_NORMAL;
+    liveKeyMode_ = false;
+    liveL2Used_ = false;
+    liveOctave_ = lastNote_ / 12 - 2;
+    previousButtonMask_ = 0;
+    activeLiveKeyMask_ = 0;
     updateCursor(0, 0);
 };
 
 void PhraseView::ProcessButtonMask(unsigned short mask, bool pressed) {
+
+    if (processLiveKeyButtonMask(mask))
+        return;
 
     if (!pressed) {
         if (viewMode_ == VM_MUTEON) {
@@ -949,6 +975,170 @@ void PhraseView::ProcessButtonMask(unsigned short mask, bool pressed) {
         viewMode_ = VM_NORMAL;
         processNormalButtonMask(mask);
     };
+}
+
+bool PhraseView::processLiveKeyButtonMask(unsigned short mask) {
+    unsigned short pressedButtons = mask & ~previousButtonMask_;
+    unsigned short releasedButtons = previousButtonMask_ & ~mask;
+    previousButtonMask_ = mask;
+
+    if (pressedButtons & EPBM_L2) {
+        liveL2Used_ = false;
+        isDirty_ = true;
+        return true;
+    }
+
+    if (releasedButtons & EPBM_L2) {
+        if (!liveL2Used_) {
+            liveKeyMode_ = !liveKeyMode_;
+            stopLiveKey();
+            stopAudition();
+            viewMode_ = VM_NORMAL;
+            View::SetNotification(liveKeyMode_ ? "Musical keys ON"
+                                               : "Musical keys OFF");
+        } else if (!liveKeyMode_) {
+            stopLiveKey();
+        }
+        liveL2Used_ = false;
+        isDirty_ = true;
+        return true;
+    }
+
+    bool l2Held = (mask & EPBM_L2) != 0;
+    if (!liveKeyMode_ && !l2Held)
+        return false;
+
+    if (l2Held && (pressedButtons & (EPBM_UP | EPBM_DOWN))) {
+        if ((pressedButtons & EPBM_UP) &&
+            getLiveNote(11, liveOctave_ + 1) <= 119)
+            liveOctave_++;
+        if ((pressedButtons & EPBM_DOWN) && liveOctave_ > -2)
+            liveOctave_--;
+        liveL2Used_ = true;
+        char notification[24];
+        sprintf(notification, "Keys octave %d", liveOctave_);
+        View::SetNotification(notification);
+        isDirty_ = true;
+        return true;
+    }
+
+    unsigned short releasedLiveKey = releasedButtons & activeLiveKeyMask_;
+    if (releasedLiveKey)
+        stopLiveKey();
+
+    unsigned short pressedLiveKeys = pressedButtons & LIVE_KEY_MASK;
+    if (pressedLiveKeys) {
+        const unsigned short keyOrder[] = {
+            EPBM_LEFT, EPBM_DOWN, EPBM_RIGHT, EPBM_UP, EPBM_A,      EPBM_B,
+            EPBM_X,    EPBM_Y,    EPBM_R,     EPBM_R2, EPBM_SELECT, EPBM_START};
+        for (unsigned int i = 0; i < sizeof(keyOrder) / sizeof(keyOrder[0]);
+             i++) {
+            if (pressedLiveKeys & keyOrder[i]) {
+                if (l2Held)
+                    liveL2Used_ = true;
+                playLiveKey(keyOrder[i]);
+                break;
+            }
+        }
+    }
+
+    return true;
+}
+
+void PhraseView::playLiveKey(unsigned short keyMask) {
+    int keyIndex = getLiveKeyIndex(keyMask);
+    if (keyIndex < 0)
+        return;
+
+    int liveNote = getLiveNote(keyIndex, liveOctave_);
+    if (liveNote < 0 || liveNote > 119) {
+        View::SetNotification("Note outside range");
+        return;
+    }
+
+    unsigned char note = (unsigned char)liveNote;
+    unsigned char *notePosition =
+        phrase_->note_ + (16 * viewData_->currentPhrase_ + row_);
+    *notePosition = note;
+    lastNote_ = note;
+    isDirty_ = true;
+
+    int instrument = findClosestInstrumentFor(row_);
+    if (instrument < 0)
+        instrument = viewData_->currentInstrument_;
+    if (instrument < 0 || instrument >= MAX_INSTRUMENT_COUNT)
+        instrument = 0;
+
+    stopAudition();
+    Player *player = Player::GetInstance();
+    if (player->PlayLiveNote(viewData_->songX_, instrument, note)) {
+        liveNotePlaying_ = true;
+        activeLiveKeyMask_ = keyMask;
+    } else {
+        liveNotePlaying_ = false;
+        activeLiveKeyMask_ = 0;
+        if (player->IsRunning()) {
+            View::SetNotification("Stop playback to audition");
+        }
+    }
+}
+
+int PhraseView::getLiveKeyIndex(unsigned short keyMask) const {
+    switch (keyMask) {
+    case EPBM_LEFT:
+        return 0;
+    case EPBM_DOWN:
+        return 1;
+    case EPBM_RIGHT:
+        return 2;
+    case EPBM_UP:
+        return 3;
+    case EPBM_A:
+        return 4;
+    case EPBM_B:
+        return 5;
+    case EPBM_X:
+        return 6;
+    case EPBM_Y:
+        return 7;
+    case EPBM_R:
+        return 8;
+    case EPBM_R2:
+        return 9;
+    case EPBM_SELECT:
+        return 10;
+    case EPBM_START:
+        return 11;
+    default:
+        return -1;
+    }
+}
+
+int PhraseView::getLiveNote(int keyIndex, int octave) const {
+    int scale = viewData_->project_->GetScale();
+    int scaleKey = viewData_->project_->GetScaleKey();
+    int note = (octave + 2) * 12 + scaleKey;
+
+    while (note <= 119 && !scaleSteps[scale][(note - scaleKey) % 12]) {
+        note++;
+    }
+
+    while (note <= 119 && keyIndex > 0) {
+        note++;
+        if (note <= 119 && scaleSteps[scale][(note - scaleKey) % 12])
+            keyIndex--;
+    }
+
+    return note;
+}
+
+void PhraseView::stopLiveKey() {
+    if (liveNotePlaying_) {
+        Player::GetInstance()->ReleaseLiveNote(
+            viewData_->songX_, viewData_->project_->GetKeyRelease());
+    }
+    liveNotePlaying_ = false;
+    activeLiveKeyMask_ = 0;
 }
 
 void PhraseView::processNormalButtonMask(unsigned short mask) {
@@ -1257,10 +1447,15 @@ void PhraseView::DrawView() {
 
     // Draw title
 
-    char title[20];
+    char title[24];
 
     SetColor(CD_NORMAL);
-    sprintf(title, "Phrase %2.2x", viewData_->currentPhrase_);
+    if (liveKeyMode_) {
+        sprintf(title, "Phrase %2.2x Keys %s O%d", viewData_->currentPhrase_,
+                scaleNotes[viewData_->project_->GetScaleKey()], liveOctave_);
+    } else {
+        sprintf(title, "Phrase %2.2x", viewData_->currentPhrase_);
+    }
     DrawString(pos._x, pos._y, title, props);
 
     // Compute song grid location

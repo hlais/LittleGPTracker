@@ -140,6 +140,9 @@ bool TablePlayback::ProcessLocalCommand(int row,FourCC *commandList,ushort *para
 		case I_CMD_KILL:
 			tpc.timeToLive_=(param&0xFF)+1 ;
 			break ;
+		case I_CMD_RELS:
+			tpc.releaseTicks_=(param&0xFF) ;
+			break ;
 		case I_CMD_IRTG:
 			tpc.instrRetrigger_=(param&0xFF) ;
 			break ;

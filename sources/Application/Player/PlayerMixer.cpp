@@ -118,15 +118,24 @@ void PlayerMixer::Update(Observable &o,I_ObservableData *d) {
 
 
 void PlayerMixer::StartInstrument(int channel,I_Instrument *instrument,unsigned char note,bool newInstrument)  {
-	channel_[channel]->StartInstrument(instrument,note,newInstrument) ;
-	lastInstrument_[channel]=instrument ;
-	notes_[channel]=note ;
-
-} ;
+    channel_[channel]->StartInstrument(instrument, note, newInstrument);
+    lastInstrument_[channel] = instrument;
+    notes_[channel] = note;
+};
 
 void PlayerMixer::StopInstrument(int channel) {
-    channel_[channel]->StopInstrument() ;
-    notes_[channel]=0xFF ;
+    channel_[channel]->StopInstrument();
+    notes_[channel] = 0xFF;
+}
+
+void PlayerMixer::ReleaseInstrument(int channel, int milliseconds) {
+    channel_[channel]->ReleaseInstrument(milliseconds);
+    notes_[channel] = 0xFF;
+}
+
+void PlayerMixer::ReleaseInstrumentSamples(int channel, int sampleCount) {
+    channel_[channel]->ReleaseInstrumentSamples(sampleCount);
+    notes_[channel] = 0xFF;
 }
 
 I_Instrument *PlayerMixer::GetInstrument(int channel) {

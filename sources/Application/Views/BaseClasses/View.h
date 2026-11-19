@@ -31,8 +31,12 @@ enum GUIEventPadButtonMasks {
     EPBM_R = 128,
     EPBM_START = 256,
     EPBM_SELECT = 512,
-    EPBM_DOUBLE_A = 1024,
-    EPBM_DOUBLE_B = 2048
+    EPBM_X = 1024,
+    EPBM_Y = 2048,
+    EPBM_L2 = 4096,
+    EPBM_R2 = 8192,
+    EPBM_DOUBLE_A = 16384,
+    EPBM_DOUBLE_B = 32768
 };
 
 enum ViewType {

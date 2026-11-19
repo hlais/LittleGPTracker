@@ -46,6 +46,11 @@ static inline std::string* getHelpLegend(FourCC command) {
 			result[1].assign("from current position over");
 			result[2].assign("bb ticks at speed aa");
 			break;
+		case I_CMD_RELS:
+			result[0].assign("RELeaSe:--bb");
+			result[1].assign("fade sample and stop");
+			result[2].assign("over bb ticks");
+			break;
 		case I_CMD_TMPO:
 			result[0].assign("TeMPO:--bb");
 			result[1].assign("sets the tempo to hex");
