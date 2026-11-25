@@ -73,6 +73,8 @@ public:
 
     bool PlayLiveNote(int channel, int instrument, unsigned char note,
                       unsigned short arpeggio = 0);
+    int PlayLiveChord(int channel, int instrument, const unsigned char *notes,
+                      int noteCount);
     void StopLiveNote(int channel);
     void ReleaseLiveNote(int channel, int milliseconds);
 
@@ -149,8 +151,9 @@ protected:
     double currentTime_;
 
     char instrumentOnChannel_[SONG_CHANNEL_COUNT][3];
-    int liveNoteChannel_;
-    unsigned int liveNoteGeneration_;
+    int liveNoteChannels_[SONG_CHANNEL_COUNT];
+    unsigned int liveNoteGenerations_[SONG_CHANNEL_COUNT];
+    int liveNoteCount_;
 
     // Live queuing system
 

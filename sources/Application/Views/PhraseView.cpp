@@ -15,7 +15,7 @@ short PhraseView::offsets_[2][4] = {-1, 1, 12, -12, -1, 1, 16, -16};
 
 static const unsigned short LIVE_KEY_MASK =
     EPBM_LEFT | EPBM_DOWN | EPBM_RIGHT | EPBM_UP | EPBM_A | EPBM_B | EPBM_X |
-    EPBM_Y | EPBM_R | EPBM_R2 | EPBM_SELECT | EPBM_START;
+    EPBM_Y | EPBM_L | EPBM_L2 | EPBM_R | EPBM_R2;
 
 enum LiveChordType {
     LCT_NOTE,
@@ -53,11 +53,17 @@ PhraseView::PhraseView(GUIWindow &w, ViewData *viewData)
     lastParam_ = 0;
     commandSelectorModalActive_ = false;
     liveKeyMode_ = false;
-    liveL2Used_ = false;
+    liveRecordMode_ = false;
+    liveSelectUsed_ = false;
     liveNotePlaying_ = false;
     liveChordSelector_ = false;
     liveChordType_ = LCT_NOTE;
     pendingLiveChordType_ = LCT_TRIAD;
+    liveChordWriteSongRow_ = -1;
+    liveChordWriteRootChannel_ = -1;
+    liveChordWriteChannelCount_ = 0;
+    for (int i = 0; i < 4; i++)
+        liveChordWriteChannels_[i] = -1;
     liveOctave_ = 3;
     previousButtonMask_ = 0;
     activeLiveKeyMask_ = 0;
@@ -842,10 +848,16 @@ void PhraseView::OnFocus() {
     clipboard_.active_ = false;
     viewMode_ = VM_NORMAL;
     liveKeyMode_ = false;
-    liveL2Used_ = false;
+    liveRecordMode_ = false;
+    liveSelectUsed_ = false;
     liveChordSelector_ = false;
     liveChordType_ = LCT_NOTE;
     pendingLiveChordType_ = LCT_TRIAD;
+    liveChordWriteSongRow_ = -1;
+    liveChordWriteRootChannel_ = -1;
+    liveChordWriteChannelCount_ = 0;
+    for (int i = 0; i < 4; i++)
+        liveChordWriteChannels_[i] = -1;
     liveOctave_ = lastNote_ / 12 - 2;
     previousButtonMask_ = 0;
     activeLiveKeyMask_ = 0;
@@ -1000,23 +1012,22 @@ bool PhraseView::processLiveKeyButtonMask(unsigned short mask) {
     unsigned short releasedButtons = previousButtonMask_ & ~mask;
     previousButtonMask_ = mask;
 
-    if (!liveChordSelector_ && (mask & EPBM_L2) && (mask & EPBM_L) &&
-        (pressedButtons & (EPBM_L2 | EPBM_L))) {
+    // SELECT+L1 opens a persistent chord selector. The buttons are released
+    // before choosing, so the menu never interferes with the normal L1 tools.
+    if (!liveChordSelector_ && (mask & EPBM_SELECT) && (mask & EPBM_L) &&
+        (pressedButtons & (EPBM_SELECT | EPBM_L))) {
         stopLiveKey();
         liveChordSelector_ = true;
         pendingLiveChordType_ =
             liveChordType_ == LCT_NOTE ? LCT_TRIAD : liveChordType_;
-        liveL2Used_ = true;
+        liveSelectUsed_ = true;
         showLiveChordSelector();
         isDirty_ = true;
         return true;
     }
 
     if (liveChordSelector_) {
-        if (releasedButtons & EPBM_L2) {
-            liveChordSelector_ = false;
-            View::SetNotification("Chord selection cancelled");
-        } else if (pressedButtons & (EPBM_LEFT | EPBM_DOWN)) {
+        if (pressedButtons & (EPBM_LEFT | EPBM_DOWN)) {
             pendingLiveChordType_ =
                 (pendingLiveChordType_ + LCT_COUNT - 1) % LCT_COUNT;
             showLiveChordSelector();
@@ -1027,55 +1038,110 @@ bool PhraseView::processLiveKeyButtonMask(unsigned short mask) {
             liveChordType_ = pendingLiveChordType_;
             liveChordSelector_ = false;
             liveKeyMode_ = true;
-            char notification[24];
+            char notification[28];
             sprintf(notification, "Musical keys: %s",
                     LIVE_CHORD_NAMES[liveChordType_]);
             View::SetNotification(notification);
-        } else if (pressedButtons & EPBM_B) {
+        } else if (pressedButtons & (EPBM_B | EPBM_SELECT)) {
             liveChordSelector_ = false;
             View::SetNotification("Chord selection cancelled");
         }
-        liveL2Used_ = true;
+        liveSelectUsed_ = true;
         isDirty_ = true;
         return true;
     }
 
-    if (pressedButtons & EPBM_L2) {
-        liveL2Used_ = false;
+    // SELECT+START starts the current Phrase and arms live recording. Adding R1
+    // starts all tracks. Other playback never enables recording by itself.
+    // Modifiers must be held before START so the combination is unambiguous.
+    if ((pressedButtons & EPBM_START) && (mask & EPBM_SELECT)) {
+        Player *player = Player::GetInstance();
+        bool startAllTracks = (mask & EPBM_R) != 0;
+        bool wasRunning =
+            player->IsRunning() && viewData_->playMode_ != PM_AUDITION;
+        stopLiveKey();
+        liveSelectUsed_ = true;
+
+        bool stopRecording = liveRecordMode_ && wasRunning;
+        if (stopRecording) {
+            liveRecordMode_ = false;
+            player->OnStartButton(PM_PHRASE, viewData_->songX_, startAllTracks,
+                                  viewData_->chainRow_);
+        } else {
+            if (wasRunning)
+                player->OnStartButton(PM_PHRASE, viewData_->songX_,
+                                      startAllTracks, viewData_->chainRow_);
+            liveRecordMode_ = true;
+            liveKeyMode_ = true;
+            player->OnStartButton(PM_PHRASE, viewData_->songX_, startAllTracks,
+                                  viewData_->chainRow_);
+            if (!player->IsRunning() || !syncLiveRecordCursor())
+                liveRecordMode_ = false;
+        }
+        View::SetNotification(liveRecordMode_ ? "Live record ON"
+                                              : "Live record OFF");
         isDirty_ = true;
         return true;
     }
 
-    if (releasedButtons & EPBM_L2) {
-        if (!liveL2Used_) {
+    if (pressedButtons & EPBM_SELECT) {
+        liveSelectUsed_ = false;
+        isDirty_ = true;
+        return true;
+    }
+
+    if (releasedButtons & EPBM_SELECT) {
+        if (!liveSelectUsed_) {
             liveKeyMode_ = !liveKeyMode_;
             stopLiveKey();
             stopAudition();
             viewMode_ = VM_NORMAL;
             View::SetNotification(liveKeyMode_ ? "Musical keys ON"
                                                : "Musical keys OFF");
+            if (!liveKeyMode_)
+                liveRecordMode_ = false;
         } else if (!liveKeyMode_) {
             stopLiveKey();
         }
-        liveL2Used_ = false;
+        liveSelectUsed_ = false;
         isDirty_ = true;
         return true;
     }
 
-    bool l2Held = (mask & EPBM_L2) != 0;
-    if (!liveKeyMode_ && !l2Held)
+    bool selectHeld = (mask & EPBM_SELECT) != 0;
+    if (!liveKeyMode_ && !selectHeld)
         return false;
 
-    if (l2Held && (pressedButtons & (EPBM_UP | EPBM_DOWN))) {
+    // Reserve SELECT+R1 for the live-record transport. R1 remains a musical
+    // key whenever SELECT is not being held.
+    if (selectHeld && (pressedButtons & EPBM_R)) {
+        liveSelectUsed_ = true;
+        return true;
+    }
+
+    if (selectHeld && (pressedButtons & (EPBM_UP | EPBM_DOWN))) {
         if ((pressedButtons & EPBM_UP) &&
             getLiveNote(11, liveOctave_ + 1) <= 119)
             liveOctave_++;
         if ((pressedButtons & EPBM_DOWN) && liveOctave_ > -2)
             liveOctave_--;
-        liveL2Used_ = true;
+        liveSelectUsed_ = true;
         char notification[24];
         sprintf(notification, "Keys octave %d", liveOctave_);
         View::SetNotification(notification);
+        isDirty_ = true;
+        return true;
+    }
+
+    // In musical-keys mode, an ordinary START press keeps its normal
+    // transport meaning but never arms recording. R1+START plays all tracks.
+    if (pressedButtons & EPBM_START) {
+        Player *player = Player::GetInstance();
+        bool startAllTracks = (mask & EPBM_R) != 0;
+        stopLiveKey();
+        liveRecordMode_ = false;
+        player->OnStartButton(PM_PHRASE, viewData_->songX_, startAllTracks,
+                              viewData_->chainRow_);
         isDirty_ = true;
         return true;
     }
@@ -1087,13 +1153,13 @@ bool PhraseView::processLiveKeyButtonMask(unsigned short mask) {
     unsigned short pressedLiveKeys = pressedButtons & LIVE_KEY_MASK;
     if (pressedLiveKeys) {
         const unsigned short keyOrder[] = {
-            EPBM_LEFT, EPBM_DOWN, EPBM_RIGHT, EPBM_UP, EPBM_A,      EPBM_B,
-            EPBM_X,    EPBM_Y,    EPBM_R,     EPBM_R2, EPBM_SELECT, EPBM_START};
+            EPBM_LEFT, EPBM_DOWN, EPBM_RIGHT, EPBM_UP, EPBM_A, EPBM_B,
+            EPBM_X,    EPBM_Y,    EPBM_L,     EPBM_L2, EPBM_R, EPBM_R2};
         for (unsigned int i = 0; i < sizeof(keyOrder) / sizeof(keyOrder[0]);
              i++) {
             if (pressedLiveKeys & keyOrder[i]) {
-                if (l2Held)
-                    liveL2Used_ = true;
+                if (selectHeld)
+                    liveSelectUsed_ = true;
                 playLiveKey(keyOrder[i]);
                 break;
             }
@@ -1108,6 +1174,14 @@ void PhraseView::playLiveKey(unsigned short keyMask) {
     if (keyIndex < 0)
         return;
 
+    Player *player = Player::GetInstance();
+    bool transportRunning =
+        player->IsRunning() && viewData_->playMode_ != PM_AUDITION;
+    if (liveRecordMode_ && !syncLiveRecordCursor()) {
+        View::SetNotification("No active Phrase to record");
+        return;
+    }
+
     int liveNote = getLiveNote(keyIndex, liveOctave_);
     if (liveNote < 0 || liveNote > 119) {
         View::SetNotification("Note outside range");
@@ -1115,11 +1189,13 @@ void PhraseView::playLiveKey(unsigned short keyMask) {
     }
 
     unsigned char note = (unsigned char)liveNote;
-    unsigned char *notePosition =
-        phrase_->note_ + (16 * viewData_->currentPhrase_ + row_);
-    *notePosition = note;
+    if (liveRecordMode_ || !transportRunning) {
+        unsigned char *notePosition =
+            phrase_->note_ + (16 * viewData_->currentPhrase_ + row_);
+        *notePosition = note;
+        isDirty_ = true;
+    }
     lastNote_ = note;
-    isDirty_ = true;
 
     int instrument = findClosestInstrumentFor(row_);
     if (instrument < 0)
@@ -1127,15 +1203,31 @@ void PhraseView::playLiveKey(unsigned short keyMask) {
     if (instrument < 0 || instrument >= MAX_INSTRUMENT_COUNT)
         instrument = 0;
 
-    unsigned short arpeggio = getLiveChordArpeggio(note);
-    if (arpeggio)
-        writeLiveChordCommand(arpeggio);
+    unsigned char chordNotes[5];
+    int chordNoteCount = getLiveChordNotes(note, chordNotes);
+    int writtenChordTones = 0;
+    if (liveRecordMode_ || !transportRunning)
+        writtenChordTones =
+            writeLiveChordNotes(chordNotes, chordNoteCount, instrument);
 
     stopAudition();
-    Player *player = Player::GetInstance();
-    if (player->PlayLiveNote(viewData_->songX_, instrument, note, arpeggio)) {
+    int playedVoices = player->PlayLiveChord(viewData_->songX_, instrument,
+                                             chordNotes, chordNoteCount);
+    if (playedVoices > 0) {
         liveNotePlaying_ = true;
         activeLiveKeyMask_ = keyMask;
+        if ((liveRecordMode_ || !transportRunning) &&
+            writtenChordTones + 1 < chordNoteCount) {
+            char notification[28];
+            sprintf(notification, "Chord saved %d/%d", writtenChordTones + 1,
+                    chordNoteCount);
+            View::SetNotification(notification);
+        } else if (playedVoices < chordNoteCount) {
+            char notification[28];
+            sprintf(notification, "Chord voices %d/%d", playedVoices,
+                    chordNoteCount);
+            View::SetNotification(notification);
+        }
     } else {
         liveNotePlaying_ = false;
         activeLiveKeyMask_ = 0;
@@ -1161,13 +1253,13 @@ int PhraseView::getLiveKeyIndex(unsigned short keyMask) const {
         return 6;
     case EPBM_Y:
         return 7;
-    case EPBM_R:
+    case EPBM_L:
         return 8;
-    case EPBM_R2:
+    case EPBM_L2:
         return 9;
-    case EPBM_SELECT:
+    case EPBM_R:
         return 10;
-    case EPBM_START:
+    case EPBM_R2:
         return 11;
     default:
         return -1;
@@ -1177,6 +1269,24 @@ int PhraseView::getLiveKeyIndex(unsigned short keyMask) const {
 int PhraseView::getLiveNote(int keyIndex, int octave) const {
     int scale = viewData_->project_->GetScale();
     int scaleKey = viewData_->project_->GetScaleKey();
+    int scaleSize = 0;
+    for (int step = 0; step < scaleNoteCount; step++) {
+        if (scaleSteps[scale][step])
+            scaleSize++;
+    }
+
+    // Keep the D-pad and A/B/X/Y inside one scale octave. Scales with seven
+    // notes or fewer are spread root-to-root across those eight primary keys.
+    // The four shoulder keys then continue above that octave.
+    const int primaryKeyCount = 8;
+    if (scaleSize > 0 && scaleSize <= 7) {
+        if (keyIndex < primaryKeyCount) {
+            keyIndex = (keyIndex * scaleSize + 3) / (primaryKeyCount - 1);
+        } else {
+            keyIndex = scaleSize + 1 + (keyIndex - primaryKeyCount);
+        }
+    }
+
     int note = (octave + 2) * 12 + scaleKey;
 
     while (note <= 119 && !scaleSteps[scale][(note - scaleKey) % 12]) {
@@ -1192,73 +1302,186 @@ int PhraseView::getLiveNote(int keyIndex, int octave) const {
     return note;
 }
 
-unsigned short PhraseView::getLiveChordArpeggio(int rootNote) const {
-    if (liveChordType_ == LCT_NOTE)
-        return 0;
+int PhraseView::getLiveChordNotes(unsigned char rootNote,
+                                  unsigned char *notes) const {
+    static const int toneCounts[LCT_COUNT] = {1, 2, 3, 4, 5};
+    static const int degreeOffsets[LCT_COUNT][5] = {{0, 0, 0, 0, 0},
+                                                    {0, 4, 0, 0, 0},
+                                                    {0, 2, 4, 0, 0},
+                                                    {0, 2, 4, 6, 0},
+                                                    {0, 2, 4, 6, 8}};
+    static const int chromaticIntervals[LCT_COUNT][5] = {{0, 0, 0, 0, 0},
+                                                         {0, 7, 0, 0, 0},
+                                                         {0, 4, 7, 0, 0},
+                                                         {0, 4, 7, 11, 0},
+                                                         {0, 4, 7, 11, 14}};
 
-    static const int degreeOffsets[LCT_COUNT][4] = {
-        {0, 0, 0, 0}, {4, 0, 0, 0}, {2, 4, 0, 0}, {2, 4, 6, 0}, {2, 4, 6, 8}};
-    static const int toneCounts[LCT_COUNT] = {0, 1, 2, 3, 4};
+    int chordType = liveChordType_;
+    if (chordType < LCT_NOTE || chordType >= LCT_COUNT)
+        chordType = LCT_NOTE;
 
     int scale = viewData_->project_->GetScale();
     int scaleKey = viewData_->project_->GetScaleKey();
-    unsigned short arpeggio = 0;
-
-    for (int tone = 0; tone < toneCounts[liveChordType_]; tone++) {
+    int noteCount = 0;
+    for (int tone = 0; tone < toneCounts[chordType]; tone++) {
         int targetNote = rootNote;
-        int degrees = degreeOffsets[liveChordType_][tone];
-        while (degrees > 0) {
-            targetNote++;
-            int scaleStep = (targetNote - scaleKey) % 12;
-            if (scaleStep < 0)
-                scaleStep += 12;
-            if (scaleSteps[scale][scaleStep])
-                degrees--;
+        if (scale == 0) {
+            targetNote += chromaticIntervals[chordType][tone];
+        } else {
+            int degrees = degreeOffsets[chordType][tone];
+            while (targetNote < 119 && degrees > 0) {
+                targetNote++;
+                int scaleStep = (targetNote - scaleKey) % 12;
+                if (scaleStep < 0)
+                    scaleStep += 12;
+                if (scaleSteps[scale][scaleStep])
+                    degrees--;
+            }
+            if (degrees > 0)
+                break;
         }
 
-        int interval = targetNote - rootNote;
-        if (interval > 15)
-            interval = 15;
-        arpeggio |= (interval & 0xF) << (12 - tone * 4);
+        if (targetNote > 119)
+            break;
+        notes[noteCount++] = (unsigned char)targetNote;
     }
-
-    return arpeggio;
+    return noteCount;
 }
 
-void PhraseView::writeLiveChordCommand(unsigned short arpeggio) {
-    int position = 16 * viewData_->currentPhrase_ + row_;
-    FourCC *commands[] = {phrase_->cmd1_ + position, phrase_->cmd2_ + position};
-    ushort *parameters[] = {phrase_->param1_ + position,
-                            phrase_->param2_ + position};
-    int target = -1;
+bool PhraseView::ensureLiveChordPhrase(int channel, int songRow, int chainRow,
+                                       unsigned char &targetPhrase) {
+    if (channel < 0 || channel >= SONG_CHANNEL_COUNT || songRow < 0 ||
+        songRow >= SONG_ROW_COUNT || chainRow < 0 || chainRow >= 16)
+        return false;
 
-    for (int i = 0; i < 2; i++) {
-        if (*commands[i] == I_CMD_ARPG) {
-            target = i;
-            break;
+    Song *song = viewData_->song_;
+    unsigned char *songCell =
+        song->data_ + songRow * SONG_CHANNEL_COUNT + channel;
+    unsigned char chain = *songCell;
+
+    if (chain == 0xFF) {
+        unsigned short nextPhrase = song->phrase_->GetNext();
+        if (nextPhrase == NO_MORE_PHRASE) {
+            View::SetNotification("No free Phrase for chord");
+            return false;
         }
+        unsigned short nextChain = song->chain_->GetNext();
+        if (nextChain == NO_MORE_CHAIN) {
+            View::SetNotification("No free Chain for chord");
+            return false;
+        }
+        chain = (unsigned char)nextChain;
+        *songCell = chain;
+        targetPhrase = (unsigned char)nextPhrase;
+        song->chain_->data_[16 * chain + chainRow] = targetPhrase;
+        isDirty_ = true;
+        return true;
     }
-    if (target < 0) {
-        for (int i = 0; i < 2; i++) {
-            if (*commands[i] == I_CMD_NONE) {
-                target = i;
+
+    unsigned char *phraseCell = song->chain_->data_ + 16 * chain + chainRow;
+    if (*phraseCell == 0xFF) {
+        unsigned short nextPhrase = song->phrase_->GetNext();
+        if (nextPhrase == NO_MORE_PHRASE) {
+            View::SetNotification("No free Phrase for chord");
+            return false;
+        }
+        *phraseCell = (unsigned char)nextPhrase;
+        isDirty_ = true;
+    }
+    targetPhrase = *phraseCell;
+    return true;
+}
+
+int PhraseView::writeLiveChordNotes(const unsigned char *notes, int noteCount,
+                                    int instrument) {
+    if (!notes || noteCount < 1)
+        return 0;
+
+    int rootChannel = viewData_->songX_;
+    int songRow = viewData_->songOffset_ + viewData_->songY_;
+    Player *player = Player::GetInstance();
+    if (liveRecordMode_ && rootChannel >= 0 &&
+        rootChannel < SONG_CHANNEL_COUNT &&
+        player->IsChannelPlaying(rootChannel) &&
+        viewData_->songPlayPos_[rootChannel] >= 0 &&
+        viewData_->songPlayPos_[rootChannel] < SONG_ROW_COUNT) {
+        songRow = viewData_->songPlayPos_[rootChannel];
+    }
+    if (songRow < 0 || songRow >= SONG_ROW_COUNT)
+        return 0;
+
+    if (songRow != liveChordWriteSongRow_ ||
+        rootChannel != liveChordWriteRootChannel_) {
+        liveChordWriteSongRow_ = songRow;
+        liveChordWriteRootChannel_ = rootChannel;
+        liveChordWriteChannelCount_ = 0;
+        for (int i = 0; i < 4; i++)
+            liveChordWriteChannels_[i] = -1;
+    }
+
+    int requiredChannels = noteCount - 1;
+    if (requiredChannels > 4)
+        requiredChannels = 4;
+
+    // Reuse the channels allocated for earlier chord steps in this Song row.
+    // Allocate additional voices only into genuinely empty Song cells.
+    for (int offset = 1; offset < SONG_CHANNEL_COUNT &&
+                         liveChordWriteChannelCount_ < requiredChannels;
+         offset++) {
+        int candidate = (rootChannel + offset) % SONG_CHANNEL_COUNT;
+        bool alreadyUsed = false;
+        for (int i = 0; i < liveChordWriteChannelCount_; i++) {
+            if (liveChordWriteChannels_[i] == candidate) {
+                alreadyUsed = true;
                 break;
             }
         }
+        if (alreadyUsed)
+            continue;
+
+        unsigned char *songCell =
+            viewData_->song_->data_ + songRow * SONG_CHANNEL_COUNT + candidate;
+        if (*songCell == 0xFF)
+            liveChordWriteChannels_[liveChordWriteChannelCount_++] = candidate;
     }
 
-    if (target >= 0) {
-        *commands[target] = I_CMD_ARPG;
-        *parameters[target] = arpeggio;
-        lastCmd_ = I_CMD_ARPG;
-        lastParam_ = arpeggio;
-    } else {
-        View::SetNotification("No empty command for chord");
+    // If the chord was reduced (for example 9TH to TRIAD), clear only the
+    // surplus notes previously written by this live chord assignment.
+    for (int i = requiredChannels; i < liveChordWriteChannelCount_; i++) {
+        int channel = liveChordWriteChannels_[i];
+        unsigned char *songCell =
+            viewData_->song_->data_ + songRow * SONG_CHANNEL_COUNT + channel;
+        if (*songCell == 0xFF)
+            continue;
+        unsigned char phrase =
+            viewData_->song_->chain_
+                ->data_[16 * (*songCell) + viewData_->chainRow_];
+        if (phrase != 0xFF) {
+            phrase_->note_[16 * phrase + row_] = 0xFF;
+            phrase_->instr_[16 * phrase + row_] = 0xFF;
+            isDirty_ = true;
+        }
     }
+
+    int written = 0;
+    int channelsToWrite = requiredChannels;
+    if (channelsToWrite > liveChordWriteChannelCount_)
+        channelsToWrite = liveChordWriteChannelCount_;
+    for (int i = 0; i < channelsToWrite; i++) {
+        unsigned char targetPhrase = 0xFF;
+        if (!ensureLiveChordPhrase(liveChordWriteChannels_[i], songRow,
+                                   viewData_->chainRow_, targetPhrase))
+            break;
+        phrase_->note_[16 * targetPhrase + row_] = notes[i + 1];
+        phrase_->instr_[16 * targetPhrase + row_] = (unsigned char)instrument;
+        written++;
+        isDirty_ = true;
+    }
+    return written;
 }
 
 void PhraseView::showLiveChordSelector() {
-    char notification[24];
+    char notification[28];
     sprintf(notification, "Chord: %s  A=OK",
             LIVE_CHORD_NAMES[pendingLiveChordType_]);
     View::SetNotification(notification);
@@ -1271,6 +1494,50 @@ void PhraseView::stopLiveKey() {
     }
     liveNotePlaying_ = false;
     activeLiveKeyMask_ = 0;
+}
+
+bool PhraseView::syncLiveRecordCursor() {
+    Player *player = Player::GetInstance();
+    int channel = -1;
+    int selectedChannel = viewData_->songX_;
+    if (selectedChannel >= 0 && selectedChannel < SONG_CHANNEL_COUNT &&
+        player->IsChannelPlaying(selectedChannel) &&
+        viewData_->currentPlayPhrase_[selectedChannel] != 0xFF &&
+        viewData_->phrasePlayPos_[selectedChannel] >= 0 &&
+        viewData_->phrasePlayPos_[selectedChannel] < 16) {
+        channel = selectedChannel;
+    }
+
+    // If the selected channel is not active, follow the channel that is
+    // producing the visible playhead for the Phrase currently on screen.
+    if (channel < 0) {
+        for (int i = 0; i < SONG_CHANNEL_COUNT; i++) {
+            if (player->IsChannelPlaying(i) &&
+                viewData_->currentPlayPhrase_[i] == viewData_->currentPhrase_ &&
+                viewData_->phrasePlayPos_[i] >= 0 &&
+                viewData_->phrasePlayPos_[i] < 16) {
+                channel = i;
+                break;
+            }
+        }
+    }
+    if (channel < 0)
+        return false;
+
+    unsigned char phrase = viewData_->currentPlayPhrase_[channel];
+    int playRow = viewData_->phrasePlayPos_[channel];
+    if (phrase == 0xFF || playRow < 0 || playRow > 15)
+        return false;
+
+    viewData_->currentPhrase_ = phrase;
+    if (viewData_->currentPlayChain_[channel] != 0xFF)
+        viewData_->currentChain_ = viewData_->currentPlayChain_[channel];
+    if (viewData_->chainPlayPos_[channel] >= 0 &&
+        viewData_->chainPlayPos_[channel] < 16)
+        viewData_->chainRow_ = viewData_->chainPlayPos_[channel];
+    row_ = playRow;
+    updateCursor(0, 0);
+    return true;
 }
 
 void PhraseView::processNormalButtonMask(unsigned short mask) {
@@ -1585,6 +1852,9 @@ void PhraseView::DrawView() {
     if (liveChordSelector_) {
         sprintf(title, "Phrase %2.2x Pick %s", viewData_->currentPhrase_,
                 LIVE_CHORD_NAMES[pendingLiveChordType_]);
+    } else if (liveRecordMode_) {
+        sprintf(title, "Phrase %2.2x REC %s O%d", viewData_->currentPhrase_,
+                scaleNotes[viewData_->project_->GetScaleKey()], liveOctave_);
     } else if (liveKeyMode_ && liveChordType_ != LCT_NOTE) {
         sprintf(title, "Phrase %2.2x Ch %s O%d", viewData_->currentPhrase_,
                 LIVE_CHORD_NAMES[liveChordType_], liveOctave_);
@@ -1796,6 +2066,12 @@ void PhraseView::DrawView() {
 void PhraseView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
 
     GUITextProperties props;
+    Player *player = Player::GetInstance();
+    if (eventType == PET_STOP) {
+        liveRecordMode_ = false;
+    } else if (liveRecordMode_) {
+        syncLiveRecordCursor();
+    }
     drawNotes();
 
     GUIPoint anchor = GetAnchor();
@@ -1809,8 +2085,6 @@ void PhraseView::OnPlayerUpdate(PlayerEventType eventType, unsigned int tick) {
         !CommandSelectorCommon::popupContainsPoint(anchor, pos._x, pos._y)) {
         DrawString(pos._x, pos._y, " ", props);
     }
-
-    Player *player = Player::GetInstance();
 
     if (eventType != PET_STOP) {
 

@@ -1,13 +1,21 @@
 Unreleased
     Add a Miyoo Mini Plus musical keyboard mode to the Phrase screen
-        * Tap L2 to toggle the keyboard on or off
+        * Tap SELECT to toggle the keyboard on or off
         * Play and enter notes on the current row without moving the cursor
-        * Hold L2 and press UP/DOWN to change octave
+        * Hold SELECT and press UP/DOWN to change octave
         * Set the keyboard tonic with the new Project Key setting
-        * Map all keyboard buttons to consecutive notes in the selected scale
+        * Keep the D-pad and A/B/X/Y within one selected-scale octave; R1, R2,
+          L1 and L2 continue into the upper notes
         * Add an adjustable fade-out for live keyboard sample previews
         * Allow musical keys to be played while the song is running
-        * Add an L2+L1 scale-aware chord selector using saved ARPG commands
+        * Add opt-in live recording: SELECT+START records against the moving
+          current-Phrase row, while SELECT+R1+START plays all tracks and
+          records the selected track; ordinary playback remains preview-only
+        * Restore the shoulder buttons' original tracker functions whenever
+          musical-keys mode is off
+        * Add SELECT+L1 chord selection with real 2-5 voice sample preview
+          across separate available tracker channels, and write the extra
+          tones into newly allocated neighbouring empty Song tracks
     Add RELS command to fade and stop samples over a chosen number of ticks
 
 1.6.0-bacon20

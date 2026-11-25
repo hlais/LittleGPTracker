@@ -346,10 +346,13 @@ To move from one screen to the other, press the RTrigger combined with the direc
 - If you copy/cut anything in the phrase screen, pasting will put the data in the column where you are currently located. Pasting incompatible data like a note into the effect column etc does nothing.
 - you can clone a MIDI instrument in the phrase screen by pressing L_TRIGGER+(B,A) on instrument number in phrase screen. Properly saved & restored. You can't delete them once cloned (can't revert them to sample type).
 - If no instrument is set when triggering a new note, tables are not stopped, running commands are not stopped and phase of oscillator instrument is not reset (allowing for clickless transition)
-- On Miyoo Mini Plus, tap L2 to toggle musical-keys mode. Each key auditions its note and writes it to the current Phrase row without moving the cursor.
-- Musical-key order is LEFT, DOWN, RIGHT, UP, A, B, X, Y, R1, R2, SELECT, START. The buttons play consecutive notes from the Project Key and Scale settings; hold L2 and press UP/DOWN to change octave.
-- Musical keys remain available while the song is playing. Preview uses a silent channel when one is available; if all eight channels are sounding, it temporarily uses the selected Phrase channel.
-- Hold L2+L1 to select NOTE, 5TH, TRIAD, 7TH, or 9TH mode. Chords follow the Project Key and Scale, preview through the sample arpeggiator, and save an ARPG command into the first available command column on the current row.
+- On Miyoo Mini Plus, tap SELECT to toggle musical-keys mode. With playback stopped, each key auditions its note and writes it to the current Phrase row without moving the cursor.
+- Musical-key order is LEFT, DOWN, RIGHT, UP, A, B, X, Y, L1, L2, R1, R2. The D-pad and A/B/X/Y stay within one octave of the Project Key and Scale, spanning root to root for scales with seven or fewer notes. The four shoulder keys continue into the upper notes. Hold SELECT and press UP/DOWN to change octave.
+- Press SELECT+L1 to open the chord selector. Use LEFT/DOWN and RIGHT/UP to choose NOTE, 5TH, TRIAD, 7TH, or 9TH; press A to confirm or B to cancel. Each chord tone is a real simultaneous sample voice on a separate silent, unmuted tracker channel. During playback the preview uses only available channels where possible and reports when fewer voices could be played.
+- When note entry or live recording is active, the root is written to the selected track and the remaining chord tones are written at the same step into neighbouring empty Song tracks. LGPT allocates the required Chains and Phrases automatically and does not overwrite Song tracks that were already occupied. Ordinary playback remains preview-only.
+- Musical keys remain available while the song is playing. Ordinary playback previews notes without writing them; preview uses a silent channel when one is available, or temporarily uses the selected Phrase channel if all eight channels are sounding.
+- Hold SELECT, then press START to play the current Phrase and live-record piano keys at its moving editable row. Hold SELECT+R1, then press START to play all tracks and live-record the selected track. Repeat either combination to stop. Ordinary playback does not arm recording.
+- Outside musical-keys mode, L1 and L2 retain all of their original tracker editing functions, including selection, copy and paste combinations.
 
 ## Instrument Screen
 

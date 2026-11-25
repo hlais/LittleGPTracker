@@ -51,10 +51,14 @@ class PhraseView : public View {
     bool processLiveKeyButtonMask(unsigned short mask);
     void playLiveKey(unsigned short keyMask);
     void stopLiveKey();
+    bool syncLiveRecordCursor();
     int getLiveKeyIndex(unsigned short keyMask) const;
     int getLiveNote(int keyIndex, int octave) const;
-    unsigned short getLiveChordArpeggio(int rootNote) const;
-    void writeLiveChordCommand(unsigned short arpeggio);
+    int getLiveChordNotes(unsigned char rootNote, unsigned char *notes) const;
+    int writeLiveChordNotes(const unsigned char *notes, int noteCount,
+                            int instrument);
+    bool ensureLiveChordPhrase(int channel, int songRow, int chainRow,
+                               unsigned char &phrase);
     void showLiveChordSelector();
 
     void setTextProps(GUITextProperties &props, int row, int col, bool restore);
@@ -92,11 +96,16 @@ class PhraseView : public View {
     int saveRow_;
 
     bool liveKeyMode_;
-    bool liveL2Used_;
+    bool liveRecordMode_;
+    bool liveSelectUsed_;
     bool liveNotePlaying_;
     bool liveChordSelector_;
     int liveChordType_;
     int pendingLiveChordType_;
+    int liveChordWriteSongRow_;
+    int liveChordWriteRootChannel_;
+    int liveChordWriteChannels_[4];
+    int liveChordWriteChannelCount_;
     int liveOctave_;
     unsigned short previousButtonMask_;
     unsigned short activeLiveKeyMask_;
